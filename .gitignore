@@ -1,0 +1,8 @@
+/build
+/pico-sdk
+/pico-extras
+/pico-mcp2515
+.DS_Store
+pico_extras_import.cmake
+pico_sdk_import.cmake
+
