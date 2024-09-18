@@ -12,11 +12,13 @@ I used GPIO 10. This needs to be done with a soldering iron, no software solutio
 ***/
 
 #include <stdio.h>
+#include "pico/runtime_init.h"
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
-#include "hardware/watchdog.h"
-#include "hardware/sync.h"              // Include this header for __wfi()
+#include "hardware/irq.h"               // For interrupt enable and disable
 #include "hardware/pll.h"               // for pll_sys and pll_init() and pll_deinit()
+#include "hardware/sync.h"              // Include this header for __wfi()
+#include "hardware/watchdog.h"
 #include "pico-mcp2515/include/mcp2515/mcp2515.h"
 
 
@@ -147,6 +149,7 @@ int main()
     uint save = scb_hw->scr;
 
     printf("Going to sleep with dog and enabled interrupt...\n\n");
+    uint32_t irq_status = save_and_disable_interrupts();  // Disable interrupts and save status
     watchdog_enable(WATCHDOG_TIMEOUT, 1);
     gpio_set_irq_enabled_with_callback(MCP2515_INT, GPIO_IRQ_LEVEL_LOW, true, &can_arrived);
 
@@ -171,61 +174,10 @@ int main()
     clocks_hw->sleep_en0 = clock0_orig;
     clocks_hw->sleep_en1 = clock1_orig;
     scb_hw->scr = save;
-    
-    // Initialize pll_sys for 125 MHz system clock
-    pll_init(
-        pll_sys,       // PLL instance
-        1,             // REFDIV
-        1500 * MHZ,    // VCO frequency
-        6,             // POSTDIV1
-        2              // POSTDIV2
-    );
 
-    // Configure clk_sys to use pll_sys
-    clock_configure(
-        clk_sys,
-        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
-        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-        125 * MHZ,     // Input frequency from pll_sys
-        125 * MHZ      // Output frequency (desired)
-    );
-
-    // Configure pll_usb to generate a 48 MHz clock
-    pll_init(
-        pll_usb,          // PLL instance
-        1,                // Reference divider (REFDIV)
-        480 * MHZ,        // VCO frequency (480 MHz)
-        5,                // Post-divider 1 (POSTDIV1)
-        2                 // Post-divider 2 (POSTDIV2)
-    );
-
-    // Configure the USB clock to use pll_usb
-    clock_configure(
-        clk_usb,          // Clock to configure
-        CLOCKS_CLK_USB_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB, // Set source to pll_usb
-        0,                // No additional muxing
-        48 * MHZ,         // Input frequency (from pll_usb)
-        48 * MHZ          // Output frequency (desired)
-    );
-
-    // Configure clk_adc to use pll_usb as its source and set it to 48 MHz
-    clock_configure(
-        clk_adc,                                            // Clock being configured
-        CLOCKS_CLK_ADC_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,    // Use clk_usb as the source
-        0,                                                  // No aux source for clk_adc
-        48 * MHZ,                                           // Input frequency from pll_usb
-        48 * MHZ                                            // Desired clk_adc frequency
-    );
-
-    // Restore clk_peri to original
-    clock_configure(clk_peri,
-                0,  //not used for clk_peri!
-                CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
-                125 * MHZ,
-                125 * MHZ
-    );
-
+    runtime_init_clocks();
     stdio_init_all();
+    restore_interrupts(irq_status);  // Restore interrupts to previous state
 
     printf("Demonstrating light sleep while waiting for more interrupts to pat the dog.\n");
     while(1)
