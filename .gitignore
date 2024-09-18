@@ -1,4 +1,5 @@
-/build
+build/*
+!build/gregmake.sh
 /pico-sdk
 /pico-extras
 /pico-mcp2515
